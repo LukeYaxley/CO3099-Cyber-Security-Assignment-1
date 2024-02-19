@@ -1,93 +1,415 @@
-# CO3099 Assignment 1
+<html>
+<head>
+<link rel="stylesheet" href="style.css">
+<title>CO3099/7099 Assignment 1</title>
+</head>
+<body>
+<h1>CO3099/7099 Assignment 1</h1>
 
+<p>
+Released Jan 31, 2024; <b>Deadline Tuesday Feb 20, 2024 4:00pm</b>
+</p>
+<p>
+This assignment is worth 20% of the module mark.
+It assesses your knowledge in using the Java cryptographic API
+and related features, and your understanding of cryptographic concepts such
+as public key cryptography.
+</p>
+<p>
+You can form <b>groups of up to 2 students</b> for this assignment.
+Instructions will be provided separately.
+</p>
+<p>
+Clarifications and amendments may be announced on the 
+Blackboard discussion page for this assignment.
+<b>You are expected to read the discussions.</b>
+</p>
+<hr/>
 
+<!--
+vault? 2-step key agreement + signature for the key part
 
-## Getting started
+STS? (but use RSA?)
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+double ratchet?
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+off-the-record messaging?
+https://en.wikipedia.org/wiki/Off-the-Record_Messaging
+-->
 
-## Add your files
+<!--
+doesn't have good anonymity
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+didn't authenticate when downloading msg - even though they wouldn't be
+able to decrypt anyway, but this would remove them from the server...
+-->
 
-```
-cd existing_repo
-git remote add origin https://campus.cs.le.ac.uk/gitlab/ly105/co3099-assignment-1.git
-git branch -M main
-git push -uf origin main
-```
+<p>
+You will write a Java client-server system that allows a group of secret
+agents to send messages to each other securely using encryption and 
+authentication.
+</p>
 
-## Integrate with your tools
+<h3>Client-server architecture, public and private keys</h3>
 
-- [ ] [Set up project integrations](https://campus.cs.le.ac.uk/gitlab/ly105/co3099-assignment-1/-/settings/integrations)
+<ul>
+<li>
+The system consists of a client and a server Java program, and they must be 
+named <code>Client.java</code> and <code>Server.java</code> respectively.
+They are started by running the commands
+<pre>
+java Server port
+java Client host port userid
+</pre>
+specifying the hostname and port number of the server, and the userid of the 
+client.
+</li>
+<br/>
+<li>
+The server is a temporary store for all the messages sent by agents that
+are not yet read by their recipients.
+The server program is always running once started, and listens for incoming 
+connections at the port specified. When a client is connected, the server 
+handles the request, then waits for the next request (i.e., the server never 
+terminates). For simplicity, you can assume that only one client will 
+connect to the server at any one time.
+</li>
+<br/>
+<li>
+The secret agents are users of the client program.
+Each agent has a unique userid, which is a simple string like
+alice, bob etc. The server has userid "server".
+Each agent, as well as the server, is associated with a pair of RSA public and 
+private keys, with filenames that have .pub or .prv after the userid, 
+respectively. Thus the key files are named <code>alice.pub</code>, 
+<code>server.prv</code>, etc. 
+These keys are generated separately by a program
+<code><a href="RSAKeyGen.java">RSAKeyGen.java</a></code>.
+More details are in the comments of that program.
+</li>
+<br/>
+<li>
+It is assumed that the server already has its own private key and the public
+keys of all agents, and each agent already has their own private key as 
+well as the public key of the server.
+They obtained these keys via some separate mechanism not described here, 
+prior to the execution of the client and server programs, and is not
+part of these programs.
+<b>The client and server programs never create any new keys or
+distribute them</b>.
 
-## Collaborate with your team
+Note that an agent does not have the public key of the other agents 
+(e.g., alice does not have the public key of bob); in fact they probably
+don't know the true identity of each other. The secret agency that
+they work for do not want them to have secret communications among themselves.
+</li>
+<br/>
+<li>
+All the key files are in the same folder where the respective client/server 
+program runs from. They must not be read from other folders.
+Your programs must not require keys that they are not supposed to have.
+</li>
+</ul>
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+<h3>Messages, encryption, authentication and hashing</h3>
 
-## Test and Deploy
+<ul>
+<li>
+Whenever encryption is mentioned below, it means using the
+<code>RSA/ECB/PKCS1Padding</code> algorithm, with the appropriate 
+public/private keys generated by <code>RSAKeyGen.java</code>.
+Exactly which one is the "appropriate" key may not be spelt out in the 
+assignment specification below; it is part of the learning outcomes being
+assessed in this assignment.
+</li>
+<br/>
+<li>
+You can assume the message to be encrypted is short enough so it can be 
+encrypted by RSA (of the given key size) in one block.
+</li>
+<br/>
+<li>
+Whenever signature is mentioned below, it means using the
+<code>SHA256withRSA</code>
+algorithm with the appropriate key from the same set of public/private RSA
+keys 
+(RSA keys can also be used for signatures; in this system the same set of
+RSA keys are used for both encryption and signature purposes.)
+Again, exactly which is the "appropriate" key may not be spelt out explicitly.
+</li>
+<br/>
+<li>
+The server is an intermediary between the agents who don't have each other's
+public keys (and hence cannot encrypt for each other directly). 
+When A wants to send a message intended for B, A encrypts it with 
+the server's public key (and not B's public key, since A doesn't have it).
+When the server receives such an encrypted message, it decrypts it with
+the appropriate key, and 
+re-encrypts it with B's public key, before storing it locally.
+In other words, the server keeps the stored messages in encrypted form
+(ready to be sent to the recipient).
+This way, if the server is compromised the messages are still secure.
+</li>
+<br/>
+<li>
+Whenever hashing of userid is mentioned below, it means
+applying the <code>MD5</code> algorithm to a string formed by
+prepending a secret string "<code>gfhk2024:</code>" to the userid, and then
+converting to hexadecimal. For example, if the userid is alice,
+the hashed userid is
+<pre>
+hex(MD5("gfhk2024:alice"))
+</pre>
+which is
+<pre>
+9f0a1765d9e72468b874eb0f749b5a9d
+</pre>
+</li>
+<br/>
+<li>
+The system tries to offer some degree of anonymity.
+The sender userid of a message are not stored
+(the sender can include it in the message itself, if they wish to).
+For the recipient userid, when the client sends a message to the server, the
+recipient userid is encrypted alongside the message, and the server has to
+decrypt the message first to find out who the recipient is.
+But then the server computes the hashed recipient userid and only uses it
+to for storing and locating their saved messages;
+the unhashed recipient userid is discarded and not stored.
+<!--
+You may want to organise the stored messages in the server in such a way
+that are grouped based on the hashed recipient userid (although it is not
+a requirement and you can decide how to do it).
+-->
+</li>
+<br/>
+<li>
+<!--A "post" consists of 
+three pieces of information: the userid of the sender (a string),
+an encrypted message (see below) and a timestamp -->
+Each message also comes with an unencrypted timestamp.
+You are free to use whatever ways to represent a timestamp
+(for example, the <code>java.util.Date</code> object).
+</li>
+<br/>
+</ul>
 
-Use the built-in continuous integration in GitLab.
+<h3>The communication protocol</h3>
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+<ul>
+<li>
+Initially, when the server is just started, it has no messages.
+For simplicity, you can assume the server only holds the messages in memory,
+i.e. there are no persistent storage of these messages
+(so when the server program quits, all messages are lost).
+You can hold these messages in any data structure you want.
+</li>
+<br/>
+<li>
+When the client program starts, it first sends the hashed userid of this 
+agent to the server. The server uses this to find out how many of its 
+saved messages are for this user.
+It sends this number (which can be zero) to the client.
+</li>
+<br/>
+<li>
+If this number is not zero, 
+then for each such message, the server generates a signature based on its
+encrypted content and timestamp, with a key that 
+proves the identity of the server. It sends the message (encrypted content
+and timestamp) and the signature to the client.
+The message is deleted from the server afterwards.
+</li>
+<br/>
+<li>
+Upon receiving these contents, the client should first verify the
+signature with the appropriate key. If the key does not verify, it should
+terminate the connection immediately.
+Otherwise, it decrypts the message with the appropriate key, and displays
+the decrypted message and the timestamp on screen.
+</li>
+<br/>
+<li>
+After displaying all these messages, the client program then asks the user
+whether they want to send a message. 
+If the user does not want to, then the program ends.
+Otherwise, the client program prompts the user to enter the recipient userid,
+and the message.
+It concatenates the recipient userid with the message
+(you can insert some separator symbol between them), then
+encrypts it with RSA. Then it
+generates a signature based on the encryption result and a timestamp,
+with an appropriate key to prove the identity of this sender.
+The encrypted content, the timestamp, the signature, and the unhashed
+sender userid are sent to the server.
+(It is only at this point that the server knows the sender's unhashed userid,
+which it needs because it needs to verify this sender's identity.)
+</li>
+<br/>
+<li>
+Only one message is sent; the client program ends afterwards.
+(If the user wants to send multiple messages they have to run the client
+program again.)
+</li>
+<br/>
+<li>
+Upon receiving these contents, the server first verifies the signature with
+the appropriate key. If the signature does not verify, 
+or if the sender userid is unrecognised (no corresponding key of that userid
+is present in the server), the message is discarded.
+Otherwise, it decrypts the message, and finds out the recipient userid.
+If the decryption fails (i.e., it results in a
+<code>BadPaddingException</code>), the message is again discarded. 
+The server then
+re-encrypts the message (but without the recipient userid).
+Finally the server computes the hashed recipient userid, and 
+saves it and the encrypted message to its collection of messages.
+<!-- add timestamp only here?) -->
+<!--using computes the hashed recipient userid and uses it to organise
+the stored messages.-->
+The original (unhashed) recipient userid is
+not stored. The signature is also not stored.
+</li>
+<br/>
+<li>
+The connection then ends and the server should wait for the next client.
+The server should not quit or terminate (even if the signature check fails
+or the client terminated their connection early).
+</li>
+<!--
+<br/>
+<li>
+A partially written Server.java is provided for you. You only
+need to add to it, but you are also free to modify any part of 
+it or write a completely different one.
+</li>
+-->
+</ul>
 
-***
+<h3>Program outputs</h3>
 
-# Editing this README
+<ul>
+<!--
+<li>
+The client program displays the received messages and prompts the user 
+for inputs as specified above. There is no particular prescribed output
+format that you have to follow.
+</li>
+<br>
+-->
+<li>
+The server program normally need not produce any screen outputs,
+but for marking purposes, it
+should print on the screen the hashed userid of the client upon each
+connection, and for each new message added, the sender and recipient userid,
+the timestamp and the plaintext message contents. It should also report 
+any signature verification/decryption failures.
+There is no fixed format required for how these printouts
+should look like.
+</li>
+<br/>
+<li>
+An example of the program outputs may look like this (you do not have to
+follow this exactly):
+<pre>
+Client program (user alice)
+--------------
+There are 0 message(s) for you.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+Do you want to send a message? [y/n]
+y
 
-## Suggestions for a good README
+Enter the recipient userid:
+bob
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+Enter your message:
+Hello bob. My id is alice and I'm your handler.
 
-## Name
-Choose a self-explaining name for your project.
+Client program (user bob)
+--------------
+There are 1 message(s) for you.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+Date: Wed Jan 26 00:32:19 GMT 2024
+Message: Hello bob. My id is alice and I'm your handler.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+Do you want to send a message? [y/n]
+y
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Enter the recipient userid:
+alice
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+Enter your message:
+What is happening???
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+Client program (user alice)
+--------------
+There are 1 message(s) for you.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+Date: Wed Jan 26 00:34:49 GMT 2024
+Message: What is happening???
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+Do you want to add a post? [y/n]
+n
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+Server program
+--------------
+login from user 9f0a1765d9e72468b874eb0f749b5a9d
+delivering 0 message(s)...
+incoming message from alice
+Wed Jan 26 00:32:19 GMT 2024
+recipient: bob
+message: Hello bob. My id is alice and I'm your handler.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+login from user 5a0d9cc4466796c3f94c3b63c3970890
+delivering 1 message(s)...
+incoming message from bob
+Wed Jan 26 00:34:49 GMT 2024
+recipient: alice
+message: What is happening???
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+login from user 9f0a1765d9e72468b874eb0f749b5a9d
+delivering 1 message(s)...
+no incoming message.
+</pre>
+</li>
+</ul>
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+<h2>Marking criteria</h2>
 
-## License
-For open source projects, say how it is licensed.
+See <a href="ms.htm">this separate page</a>.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+<h2>Submission instructions</h2>
+
+<p>
+Submit your completed work on Blackboard ("Assessment and Feedback",
+then "Assignment 1").
+</p>
+<p>
+Your submission should consist of the two files
+<code>Client.java</code> and <code>Server.java</code>. 
+They must be of these exact names (including of the correct
+upper/lowercase).
+Should you wish to, you can include additional java files.
+But all of them must be .java files and must be uploaded as separate files
+(<b>not zipped</b>: you can select and upload multiple files in a single
+submission in Blackboard).
+</p>
+<p>
+<!--Collaboration is not permitted.-->
+Plagiarism will be treated strictly according to standard university and
+departmental procedures. Your submissions will be sent to a plagiarism 
+detection service 
+(<a href="https://theory.stanford.edu/~aiken/moss/">MOSS</a>).
+</p>
+<p>
+In line with university policy, marking will be done anonymously. 
+Only the Blackboard-supplied userid / student number will be visible in 
+marking.
+</p>
+<p>
+For the above two reasons, do not include your name, userid, student number, 
+or any other personally identifiable information in your programs. 
+</p>
+
+</body>
+</html>
