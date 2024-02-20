@@ -23,7 +23,7 @@ public class Server {
         return sb.toString();
     }
 
-    public static List<Message> userMessages = new ArrayList<Message>();
+    public static List<Message> userMessages = new ArrayList<>();
     public static void main(String[] args) throws IOException, InvalidKeySpecException, NoSuchAlgorithmException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, InvalidKeyException {
         int port = Integer.parseInt(args[0]);
 
@@ -102,7 +102,7 @@ public class Server {
                 //encrypt
                 cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
                 cipher.init(Cipher.ENCRYPT_MODE, pubKey);
-                byte[] encrypted = cipher.doFinal(result.getBytes("UTF8"));
+                byte[] encrypted = cipher.doFinal(result.getBytes(StandardCharsets.UTF_8));
 
                 //hash Recepient
                 MessageDigest md = MessageDigest.getInstance("MD5");
@@ -115,9 +115,6 @@ public class Server {
 
                 Message log = new Message(encrypted, Recepient);
                 userMessages.add(log);
-
-
-
 
             }
             catch (SocketException e){
@@ -133,11 +130,7 @@ public class Server {
     }
 
     public static List<Message> CheckMessages(String UserID){
-        //decrypt UserId
-
-
-
-        List<Message> myMessages = new ArrayList<Message>();
+        List<Message> myMessages = new ArrayList<>();
         for (Message message : userMessages){
 
             if (message.getRecepient().equals(UserID)){
