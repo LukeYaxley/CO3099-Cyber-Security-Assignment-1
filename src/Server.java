@@ -5,73 +5,139 @@ import javax.crypto.NoSuchPaddingException;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.*;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Base64;
 
 public class Server {
-    static byte[] Encrypt(PublicKey key, String string) throws NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, UnsupportedEncodingException, IllegalBlockSizeException, BadPaddingException {
-        Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
-        cipher.init(Cipher.ENCRYPT_MODE, key);
-        return cipher.update(string.getBytes(StandardCharsets.UTF_8));
-    }
-    static String Decrypt(PrivateKey key, byte[]rawInput) throws UnsupportedEncodingException, NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
 
-        Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
-        cipher.init(Cipher.DECRYPT_MODE, key);
-        byte[] stringBytes = cipher.doFinal(rawInput);
-        return new String(stringBytes, StandardCharsets.UTF_8);
+    static String toHex(byte[] input) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : input) sb.append(String.format("%02X", b));
+        return sb.toString();
     }
+
     public static List<Message> userMessages = new ArrayList<Message>();
     public static void main(String[] args) throws IOException, InvalidKeySpecException, NoSuchAlgorithmException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException, InvalidKeyException {
         int port = Integer.parseInt(args[0]);
 
+
         ServerSocket servSock = new ServerSocket(port);
         System.out.println("Server online...");
 
-        //generate private key
-        String filepath = "server.prv";
-        File f = new File(filepath);
-        byte[] keyBytes = Files.readAllBytes(f.toPath());
-        PKCS8EncodedKeySpec prvSpec = new PKCS8EncodedKeySpec(keyBytes);
-        KeyFactory kf = KeyFactory.getInstance("RSA");
-        PrivateKey prvKey = kf.generatePrivate(prvSpec);
+
+
 
 
         while(true) {
-            Socket sock = servSock.accept();
+            try {
+                Socket sock = servSock.accept();
 
                 DataInputStream inp = new DataInputStream(sock.getInputStream());
                 DataOutputStream out = new DataOutputStream(sock.getOutputStream());
-                ObjectOutputStream outObj = new ObjectOutputStream(sock.getOutputStream());
                 String senderName = inp.readUTF();
-                System.out.println(String.format("login from user %s", senderName));
+                System.out.printf("login from user %s%n", senderName);
+
+                //Generate server private key
+                File f = new File("server.prv");
+                byte[] keyBytes = Files.readAllBytes(f.toPath());
+                PKCS8EncodedKeySpec prvSpec = new PKCS8EncodedKeySpec(keyBytes);
+                KeyFactory kf = KeyFactory.getInstance("RSA");
+                PrivateKey prvKey = kf.generatePrivate(prvSpec);
+
+
 
                 //check messages from user
                 List<Message> myMessages = CheckMessages(senderName);
                 //send out messages
                 out.writeInt(myMessages.size());
-                System.out.printf("Delivering %d messages %n",myMessages.size());
+                System.out.printf("Delivering %d messages %n", myMessages.size());
+
+
+
                 for (Message message : myMessages) {
-                    outObj.writeObject(message);
+
+                    // create signature
+                    Signature sig = Signature.getInstance("SHA256withRSA");
+                    sig.initSign(prvKey);
+                    Base64.Encoder encoder = Base64.getEncoder();
+                    String stringContent = encoder.encodeToString(message.getContent());
+                    sig.update((message.getTimestamp()+ stringContent).getBytes());
+                    byte[] signature = sig.sign();
+
+                    //send server signature and content
+                    out.writeUTF(message.getTimestamp());
+                    byte[] content = message.getContent();
+                    out.writeInt(content.length);
+                    out.write(content);
+                    out.writeInt(signature.length);
+                    out.write(signature);
+                    userMessages.remove(message);
                 }
 
                 //get new messages
                 String Recepient = inp.readUTF();
-                System.out.printf("Sending Message to %s %n",Recepient);
-                String message = inp.readUTF();
-                System.out.printf("Message content: %s %n",Decrypt(prvKey,message.getBytes(StandardCharsets.UTF_8)));
+                System.out.printf("Sending Message to %s %n", Recepient);
+                int length = inp.readInt();
+                byte[] message = new byte[length];
+                inp.readFully(message);
 
-                Message log = new Message(senderName, message, Recepient);
+                //decrypt received message
+
+
+
+                // decrypt
+                Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+                cipher.init(Cipher.DECRYPT_MODE, prvKey);
+                byte[] stringBytes = cipher.doFinal(message);
+                String result = new String(stringBytes, StandardCharsets.UTF_8);
+                System.out.println(result);
+
+                //re-encrypt for recepient
+
+                // read key
+                f = new File(Recepient + ".pub");
+                keyBytes = Files.readAllBytes(f.toPath());
+                X509EncodedKeySpec pubSpec = new X509EncodedKeySpec(keyBytes);
+                kf = KeyFactory.getInstance("RSA");
+                PublicKey pubKey = kf.generatePublic(pubSpec);
+                //encrypt
+                cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+                cipher.init(Cipher.ENCRYPT_MODE, pubKey);
+                byte[] encrypted = cipher.doFinal(result.getBytes("UTF8"));
+
+                //hash Recepient
+                MessageDigest md = MessageDigest.getInstance("MD5");
+                String rec = "gfhk2024:" + Recepient;
+                byte[] d2 = md.digest(rec.getBytes());
+                Recepient = toHex(d2);
+
+
+                //System.out.println(message);
+                System.out.printf("Message content: %s %n", result);
+
+                Message log = new Message(encrypted, Recepient);
                 userMessages.add(log);
 
-                String x = null;
 
 
+
+            }
+            catch (SocketException e){
+                System.out.println("Client disconnected");
+            } catch (SignatureException e) {
+                throw new RuntimeException(e);
+            }
+            catch (EOFException e){
+                System.out.println("Client stopped communicating");
+            }
 
         }
     }
