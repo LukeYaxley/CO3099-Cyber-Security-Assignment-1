@@ -29,12 +29,13 @@ public class Client {
         Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
         cipher.init(Cipher.DECRYPT_MODE, prvKey);
         byte[] stringBytes = cipher.doFinal(input);
-        String result = new String(stringBytes, "UTF8");
-        return (result);
+        return (new String(stringBytes, StandardCharsets.UTF_8));
     }
     static String toHex(byte[] input) {
         StringBuilder sb = new StringBuilder();
-        for (byte b : input) sb.append(String.format("%02X", b));
+        for (byte b : input) {
+            sb.append(String.format("%02X", b));
+        }
         return sb.toString();
     }
     public static void main(String[] args) throws IOException {
