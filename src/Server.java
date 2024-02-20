@@ -9,9 +9,8 @@ import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.*;
-import java.security.spec.InvalidKeySpecException;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
+import java.security.spec.*;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Base64;
@@ -32,12 +31,9 @@ public class Server {
         ServerSocket servSock = new ServerSocket(port);
         System.out.println("Server online...");
 
-
-
-
-
         while(true) {
             try {
+                //connecting to client
                 Socket sock = servSock.accept();
 
                 DataInputStream inp = new DataInputStream(sock.getInputStream());
@@ -58,7 +54,7 @@ public class Server {
                 List<Message> myMessages = CheckMessages(senderName);
                 //send out messages
                 out.writeInt(myMessages.size());
-                System.out.printf("Delivering %d messages %n", myMessages.size());
+                System.out.printf("Delivering %d messages... %n", myMessages.size());
 
 
 
@@ -90,19 +86,14 @@ public class Server {
                 inp.readFully(message);
 
                 //decrypt received message
-
-
-
-                // decrypt
                 Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
                 cipher.init(Cipher.DECRYPT_MODE, prvKey);
                 byte[] stringBytes = cipher.doFinal(message);
                 String result = new String(stringBytes, StandardCharsets.UTF_8);
-                System.out.println(result);
 
                 //re-encrypt for recepient
 
-                // read key
+                // read public key and generate key
                 f = new File(Recepient + ".pub");
                 keyBytes = Files.readAllBytes(f.toPath());
                 X509EncodedKeySpec pubSpec = new X509EncodedKeySpec(keyBytes);
@@ -120,8 +111,7 @@ public class Server {
                 Recepient = toHex(d2);
 
 
-                //System.out.println(message);
-                System.out.printf("Message content: %s %n", result);
+                System.out.printf("Message content: %s %n%n", result);
 
                 Message log = new Message(encrypted, Recepient);
                 userMessages.add(log);

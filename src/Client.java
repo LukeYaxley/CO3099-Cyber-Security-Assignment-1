@@ -72,6 +72,7 @@ public class Client {
             Integer logSize = inp.readInt();
             System.out.printf("You have %d messages%n", logSize);
             if (logSize != 0) {
+                //get messages
 
                 for (int i = 0; i <= logSize; i++) {
 
@@ -97,6 +98,7 @@ public class Client {
                     sig.update((timestamp+stringContent).getBytes());
 
                     if (sig.verify(signature)){
+                        //decrypt contents and show user
                         System.out.println("Signature verified");
                         System.out.printf("%n Date:  %s %n", timestamp);//get timestamp
                         System.out.printf(" Message:  %s %n%n", Decrypt(content,UserID));
@@ -124,9 +126,6 @@ public class Client {
                 System.out.println("Enter the recipient userid:");
                 Recepient = sc.nextLine();
 
-
-
-
                 out.writeUTF(Recepient);
 
 
@@ -135,19 +134,12 @@ public class Client {
 
                 //encrypt message
 
-
-
-                // encrypt
                 Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
                 cipher.init(Cipher.ENCRYPT_MODE, pubKey);
-                byte[] raw = cipher.doFinal(message.getBytes(StandardCharsets.UTF_8));
+                byte[] encrypted = cipher.doFinal(message.getBytes(StandardCharsets.UTF_8));
 
-
-
-
-
-                out.writeInt(raw.length);
-                out.write(raw);
+                out.writeInt(encrypted.length);
+                out.write(encrypted);
 
 
             }
@@ -157,19 +149,8 @@ public class Client {
 
         catch(SocketException e) {
         System.out.println("Lost Connection.");
-    }  catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
-        } catch (NoSuchPaddingException e) {
-            throw new RuntimeException(e);
-        } catch (IllegalBlockSizeException e) {
-            throw new RuntimeException(e);
-        } catch (InvalidKeySpecException e) {
-            throw new RuntimeException(e);
-        } catch (BadPaddingException e) {
-            throw new RuntimeException(e);
-        } catch (InvalidKeyException e) {
-            throw new RuntimeException(e);
-        } catch (SignatureException e) {
+    }  catch (NoSuchAlgorithmException | InvalidKeySpecException | NoSuchPaddingException | IllegalBlockSizeException |
+              BadPaddingException | InvalidKeyException | SignatureException e) {
             throw new RuntimeException(e);
         }
     }
